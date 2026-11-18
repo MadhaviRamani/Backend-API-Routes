@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { sortAndPage } from "../sortAndPage";
 import { booksStore } from "../store/booksStore";
 import { parseBookInput, parseListQuery } from "../validation";
 
@@ -12,7 +13,9 @@ booksRouter.get("/", async (request, response) => {
     return;
   }
 
-  response.json(await booksStore.list(result.value));
+  const { filter, ...sortAndPageOptions } = result.value;
+  const books = await booksStore.list(filter);
+  response.json(sortAndPage(books, sortAndPageOptions));
 });
 
 booksRouter.post("/", async (request, response) => {

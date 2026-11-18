@@ -67,14 +67,52 @@ describe("parseBookInput", () => {
 
 describe("parseListQuery", () => {
   it("accepts an empty query", () => {
-    expect(parseListQuery({})).toEqual({ ok: true, value: {} });
+    expect(parseListQuery({})).toEqual({ ok: true, value: { filter: {}, offset: 0 } });
   });
 
   it("accepts a valid status and q", () => {
     expect(parseListQuery({ status: "reading", q: "dune" })).toEqual({
       ok: true,
-      value: { status: "reading", q: "dune" },
+      value: { filter: { status: "reading", q: "dune" }, offset: 0 },
     });
+  });
+
+  it("accepts sort, limit and offset", () => {
+    expect(parseListQuery({ sort: "title", limit: "5", offset: "10" })).toEqual({
+      ok: true,
+      value: { filter: {}, sort: "title", limit: 5, offset: 10 },
+    });
+  });
+
+  it.each(["1", "100"])("accepts limit %s", (limit) => {
+    expect(parseListQuery({ limit }).ok).toBe(true);
+  });
+
+  it("accepts offset 0", () => {
+    expect(parseListQuery({ offset: "0" })).toMatchObject({ ok: true, value: { offset: 0 } });
+  });
+
+  it.each([
+    ["unknown sort", { sort: "author" }],
+    ["sort with other case", { sort: "Title" }],
+    ["repeated sort", { sort: ["title", "title"] }],
+    ["limit abc", { limit: "abc" }],
+    ["empty limit", { limit: "" }],
+    ["limit 0", { limit: "0" }],
+    ["limit 101", { limit: "101" }],
+    ["negative limit", { limit: "-1" }],
+    ["limit 1.5", { limit: "1.5" }],
+    ["limit 1e2", { limit: "1e2" }],
+    ["limit with spaces", { limit: " 5" }],
+    ["repeated limit", { limit: ["5", "6"] }],
+    ["offset abc", { offset: "abc" }],
+    ["negative offset", { offset: "-1" }],
+    ["offset 2.5", { offset: "2.5" }],
+    ["huge offset", { offset: "99999999999999999999" }],
+  ])("rejects %s", (_name, query) => {
+    const result = parseListQuery(query);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && typeof result.error).toBe("string");
   });
 
   it("rejects an unknown status", () => {

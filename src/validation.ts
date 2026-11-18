@@ -9,10 +9,43 @@ function isStatus(value: unknown): value is Status {
   return typeof value === "string" && STATUSES.includes(value as Status);
 }
 
-/** Validates the query of `GET /api/books`. Both `status` and `q` are optional. */
-export function parseListQuery(query: unknown): ValidationResult<BookFilter> {
-  const { status, q } = (query ?? {}) as Record<string, unknown>;
+export const SORT_FIELDS = ["title"] as const;
+export type SortField = (typeof SORT_FIELDS)[number];
+
+/** The largest page `?limit=` may ask for. */
+export const MAX_LIMIT = 100;
+
+export type ListQuery = {
+  filter: BookFilter;
+  sort?: SortField;
+  limit?: number;
+  offset: number;
+};
+
+function isSortField(value: unknown): value is SortField {
+  return typeof value === "string" && SORT_FIELDS.includes(value as SortField);
+}
+
+/**
+ * Parses a whole number from a query value. Only digits are allowed, so "abc", "", "-1",
+ * "1.5", "1e2", " 5" and a repeated parameter (an array) are all rejected.
+ */
+function parseWholeNumber(value: unknown): number | undefined {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+  const number = Number(value);
+  return Number.isSafeInteger(number) ? number : undefined;
+}
+
+/**
+ * Validates the query of `GET /api/books`. All parameters are optional:
+ * `status`, `q` (filters), `sort=title`, `limit` (1 to MAX_LIMIT) and `offset` (0 or more).
+ */
+export function parseListQuery(query: unknown): ValidationResult<ListQuery> {
+  const { status, q, sort, limit, offset } = (query ?? {}) as Record<string, unknown>;
   const filter: BookFilter = {};
+  const result: ListQuery = { filter, offset: 0 };
 
   if (status !== undefined) {
     if (!isStatus(status)) {
@@ -31,7 +64,33 @@ export function parseListQuery(query: unknown): ValidationResult<BookFilter> {
     filter.q = q;
   }
 
-  return { ok: true, value: filter };
+  if (sort !== undefined) {
+    if (!isSortField(sort)) {
+      return { ok: false, error: `sort must be one of: ${SORT_FIELDS.join(", ")}` };
+    }
+    result.sort = sort;
+  }
+
+  if (limit !== undefined) {
+    const parsed = parseWholeNumber(limit);
+    if (parsed === undefined || parsed < 1 || parsed > MAX_LIMIT) {
+      return {
+        ok: false,
+        error: `limit must be a whole number from 1 to ${MAX_LIMIT}`,
+      };
+    }
+    result.limit = parsed;
+  }
+
+  if (offset !== undefined) {
+    const parsed = parseWholeNumber(offset);
+    if (parsed === undefined) {
+      return { ok: false, error: "offset must be a whole number of 0 or more" };
+    }
+    result.offset = parsed;
+  }
+
+  return { ok: true, value: result };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

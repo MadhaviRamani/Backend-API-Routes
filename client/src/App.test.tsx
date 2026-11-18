@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -6,6 +6,7 @@ import App from "./App";
 import * as api from "./api";
 import seed from "./seed.json";
 import type { Book } from "./types";
+import { PAGE_SIZE } from "./useBooks";
 
 vi.mock("./api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./api")>();
@@ -23,14 +24,39 @@ const books = seed as Book[];
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocked.listBooks.mockResolvedValue(books);
+  // Like the API: honor limit and offset.
+  mocked.listBooks.mockImplementation(async ({ limit, offset = 0 } = {}) =>
+    books.slice(offset, limit === undefined ? undefined : offset + limit)
+  );
 });
 
-test("shows a loading text, then the heading and all books from the API", async () => {
+test("shows a loading text, then the heading and the first page of books", async () => {
   render(<App />);
   expect(screen.getByRole("heading", { name: "Reading List" })).toBeInTheDocument();
   expect(screen.getByText("Loading books…")).toBeInTheDocument();
-  expect(await screen.findAllByRole("listitem")).toHaveLength(10);
+  expect(await screen.findAllByRole("listitem")).toHaveLength(PAGE_SIZE);
+  expect(screen.getByText("Dune", { exact: false })).toBeInTheDocument();
+});
+
+test("pages with the Next and Previous buttons", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findAllByRole("listitem");
+  const previous = screen.getByRole("button", { name: "Previous" });
+  const next = screen.getByRole("button", { name: "Next" });
+  expect(previous).toBeDisabled();
+  expect(next).toBeEnabled();
+
+  await user.click(next);
+
+  expect(await screen.findByText("Page 2", { exact: false })).toBeInTheDocument();
+  expect(await screen.findByText("Klara and the Sun", { exact: false })).toBeInTheDocument();
+  expect(screen.queryByText("Dune", { exact: false })).not.toBeInTheDocument();
+  // 10 books, 5 per page: page 2 is the last one.
+  expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+
+  await user.click(screen.getByRole("button", { name: "Previous" }));
+  expect(await screen.findByText("Dune", { exact: false })).toBeInTheDocument();
 });
 
 test("shows an error when the server is not reachable", async () => {
@@ -46,7 +72,11 @@ test("the status filter asks the API for that status", async () => {
 
   await user.selectOptions(screen.getByLabelText("Status"), "reading");
 
-  expect(mocked.listBooks).toHaveBeenLastCalledWith("reading");
+  await waitFor(() =>
+    expect(mocked.listBooks).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "reading", offset: 0 })
+    )
+  );
 });
 
 test("adds a book and clears the form", async () => {

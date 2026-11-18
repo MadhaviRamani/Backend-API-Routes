@@ -7,9 +7,21 @@ import { useBooks } from "./useBooks";
 const FILTERS: StatusFilter[] = ["all", "want-to-read", "reading", "done"];
 
 export default function App() {
-  const [status, setStatus] = useState<StatusFilter>("all");
-  const { books, loading, loadError, actionError, addBook, markDone, deleteBook } =
-    useBooks(status);
+  const {
+    status,
+    changeStatus,
+    page,
+    hasNextPage,
+    nextPage,
+    previousPage,
+    books,
+    loading,
+    loadError,
+    actionError,
+    addBook,
+    markDone,
+    deleteBook,
+  } = useBooks();
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
 
@@ -40,7 +52,7 @@ export default function App() {
           Status{" "}
           <select
             value={status}
-            onChange={(event) => setStatus(event.target.value as StatusFilter)}
+            onChange={(event) => changeStatus(event.target.value as StatusFilter)}
           >
             {FILTERS.map((filter) => (
               <option key={filter} value={filter}>
@@ -59,7 +71,7 @@ export default function App() {
         <p role="alert">{loadError}</p>
       ) : (
         <>
-          <p>{books.length} books</p>
+          {books.length === 0 && <p>No books.</p>}
           <ul>
             {books.map((book) => (
               <li key={book.id}>
@@ -77,6 +89,16 @@ export default function App() {
           </ul>
         </>
       )}
+
+      <nav aria-label="Pages">
+        <button type="button" onClick={previousPage} disabled={loading || page === 0}>
+          Previous
+        </button>{" "}
+        Page {page + 1}{" "}
+        <button type="button" onClick={nextPage} disabled={loading || !hasNextPage}>
+          Next
+        </button>
+      </nav>
     </main>
   );
 }

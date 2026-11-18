@@ -56,8 +56,18 @@ function jsonBody(data: unknown): RequestInit {
   };
 }
 
-export async function listBooks(status?: Status): Promise<Book[]> {
-  const query = status ? `?${new URLSearchParams({ status })}` : "";
+export type ListOptions = {
+  status?: Status;
+  limit?: number;
+  offset?: number;
+};
+
+export async function listBooks({ status, limit, offset }: ListOptions = {}): Promise<Book[]> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (limit !== undefined) params.set("limit", String(limit));
+  if (offset) params.set("offset", String(offset));
+  const query = params.size > 0 ? `?${params}` : "";
   const response = await send(`/books${query}`);
   return (await response.json()) as Book[];
 }

@@ -40,8 +40,22 @@ describe("api", () => {
 
   test("listBooks sends the status filter", async () => {
     const fetchMock = mockFetch(json([]));
-    await listBooks("reading");
+    await listBooks({ status: "reading" });
     expect(fetchMock.mock.calls[0][0]).toBe(`${API_URL}/books?status=reading`);
+  });
+
+  test("listBooks sends limit and offset", async () => {
+    const fetchMock = mockFetch(json([]));
+    await listBooks({ status: "done", limit: 6, offset: 5 });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${API_URL}/books?status=done&limit=6&offset=5`
+    );
+  });
+
+  test("listBooks leaves out offset 0", async () => {
+    const fetchMock = mockFetch(json([]));
+    await listBooks({ limit: 6, offset: 0 });
+    expect(fetchMock.mock.calls[0][0]).toBe(`${API_URL}/books?limit=6`);
   });
 
   test("createBook sends a JSON POST", async () => {
