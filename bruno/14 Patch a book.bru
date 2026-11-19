@@ -1,0 +1,23 @@
+meta {
+  name: Patch a book
+  type: http
+  seq: 14
+}
+
+patch {
+  url: {{baseUrl}}/api/books/b3
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "status": "reading"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq reading
+  res.body.title: eq Gone Girl
+}

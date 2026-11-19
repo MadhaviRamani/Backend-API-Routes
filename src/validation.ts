@@ -101,52 +101,117 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
 
+function isRating(value: unknown): value is number | null {
+  return (
+    value === null ||
+    (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5)
+  );
+}
+
+export const EDITABLE_FIELDS = ["title", "author", "status", "rating", "notes"] as const;
+
 /**
- * Validates the body of `POST /api/books` and `PUT /api/books/:id`.
+ * The rules for each editable field, in one place for POST, PUT and PATCH.
+ * Checks only the fields that are present; the callers decide which fields are required.
  * Only the five editable fields are read, so unknown fields (and an `id`) are ignored.
+ */
+function parseFields(body: Record<string, unknown>): ValidationResult<Partial<NewBook>> {
+  const { title, author, status, rating, notes } = body;
+  const value: Partial<NewBook> = {};
+
+  if (title !== undefined) {
+    if (!isNonEmptyString(title)) {
+      return { ok: false, error: "title is required and must be a non-empty string" };
+    }
+    value.title = title.trim();
+  }
+
+  if (author !== undefined) {
+    if (!isNonEmptyString(author)) {
+      return { ok: false, error: "author is required and must be a non-empty string" };
+    }
+    value.author = author.trim();
+  }
+
+  if (status !== undefined) {
+    if (!isStatus(status)) {
+      return { ok: false, error: `status must be one of: ${STATUSES.join(", ")}` };
+    }
+    value.status = status;
+  }
+
+  if (rating !== undefined) {
+    if (!isRating(rating)) {
+      return { ok: false, error: "rating must be null or an integer from 1 to 5" };
+    }
+    value.rating = rating;
+  }
+
+  if (notes !== undefined) {
+    if (typeof notes !== "string") {
+      return { ok: false, error: "notes must be a string" };
+    }
+    value.notes = notes;
+  }
+
+  return { ok: true, value };
+}
+
+/**
+ * Validates the body of `POST /api/books` and `PUT /api/books/:id`:
+ * `title` and `author` are required, the other fields get their defaults.
  */
 export function parseBookInput(body: unknown): ValidationResult<NewBook> {
   if (!isPlainObject(body)) {
     return { ok: false, error: "The body must be a JSON object" };
   }
 
-  const { title, author, status, rating, notes } = body;
+  const result = parseFields(body);
+  if (!result.ok) {
+    return result;
+  }
 
-  if (!isNonEmptyString(title)) {
+  const { title, author, status, rating, notes } = result.value;
+  if (title === undefined) {
     return { ok: false, error: "title is required and must be a non-empty string" };
   }
-
-  if (!isNonEmptyString(author)) {
+  if (author === undefined) {
     return { ok: false, error: "author is required and must be a non-empty string" };
-  }
-
-  if (status !== undefined && !isStatus(status)) {
-    return {
-      ok: false,
-      error: `status must be one of: ${STATUSES.join(", ")}`,
-    };
-  }
-
-  if (
-    rating !== undefined &&
-    rating !== null &&
-    !(typeof rating === "number" && Number.isInteger(rating) && rating >= 1 && rating <= 5)
-  ) {
-    return { ok: false, error: "rating must be null or an integer from 1 to 5" };
-  }
-
-  if (notes !== undefined && typeof notes !== "string") {
-    return { ok: false, error: "notes must be a string" };
   }
 
   return {
     ok: true,
     value: {
-      title: title.trim(),
-      author: author.trim(),
+      title,
+      author,
       status: status ?? "want-to-read",
       rating: rating ?? null,
       notes: notes ?? "",
     },
   };
+}
+
+/**
+ * Validates the body of `PATCH /api/books/:id`: every field is optional,
+ * but each field that is sent follows the same rules as for POST and PUT.
+ * At least one editable field must be sent, otherwise the request would change nothing.
+ */
+export function parseBookPatch(body: unknown): ValidationResult<Partial<NewBook>> {
+  if (!isPlainObject(body)) {
+    return { ok: false, error: "The body must be a JSON object" };
+  }
+
+  const result = parseFields(body);
+  if (!result.ok) {
+    return result;
+  }
+
+  if (Object.keys(result.value).length === 0) {
+    return {
+      ok: false,
+      error: `The body must contain at least one of: ${EDITABLE_FIELDS.join(", ")}`,
+    };
+  }
+
+  return result;
 }

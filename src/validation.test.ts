@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseBookInput, parseListQuery } from "./validation";
+import { parseBookInput, parseBookPatch, parseListQuery } from "./validation";
 
 describe("parseBookInput", () => {
   it("accepts title and author and sets the defaults", () => {
@@ -121,5 +121,75 @@ describe("parseListQuery", () => {
 
   it("rejects a repeated q (array)", () => {
     expect(parseListQuery({ q: ["a", "b"] }).ok).toBe(false);
+  });
+});
+
+describe("parseBookPatch", () => {
+  it("returns only the fields that were sent", () => {
+    expect(parseBookPatch({ status: "done" })).toEqual({
+      ok: true,
+      value: { status: "done" },
+    });
+  });
+
+  it("accepts all fields and trims title and author", () => {
+    expect(
+      parseBookPatch({ title: " T ", author: " A ", status: "reading", rating: 2, notes: "n" })
+    ).toEqual({
+      ok: true,
+      value: { title: "T", author: "A", status: "reading", rating: 2, notes: "n" },
+    });
+  });
+
+  it("accepts rating null (removes the rating)", () => {
+    expect(parseBookPatch({ rating: null })).toEqual({ ok: true, value: { rating: null } });
+  });
+
+  it("accepts empty notes", () => {
+    expect(parseBookPatch({ notes: "" })).toEqual({ ok: true, value: { notes: "" } });
+  });
+
+  it("ignores an id and unknown fields next to an editable field", () => {
+    expect(parseBookPatch({ id: "x", admin: true, rating: 5 })).toEqual({
+      ok: true,
+      value: { rating: 5 },
+    });
+  });
+
+  it.each([
+    ["an empty object", {}],
+    ["only an id", { id: "x" }],
+    ["only unknown fields", { admin: true }],
+  ])("rejects %s, because it would change nothing", (_name, body) => {
+    expect(parseBookPatch(body).ok).toBe(false);
+  });
+
+  it.each([
+    ["undefined", undefined],
+    ["null", null],
+    ["an array", [{ status: "done" }]],
+    ["a string", "done"],
+  ])("rejects a body that is %s", (_name, body) => {
+    expect(parseBookPatch(body).ok).toBe(false);
+  });
+
+  it.each([
+    ["empty title", { title: "" }],
+    ["spaces-only title", { title: "   " }],
+    ["title null", { title: null }],
+    ["title as number", { title: 5 }],
+    ["empty author", { author: "" }],
+    ["unknown status", { status: "finished" }],
+    ["status null", { status: null }],
+    ["rating 0", { rating: 0 }],
+    ["rating 6", { rating: 6 }],
+    ["rating 3.5", { rating: 3.5 }],
+    ["rating as text", { rating: "4" }],
+    ["notes null", { notes: null }],
+    ["one valid and one invalid field", { status: "done", rating: 9 }],
+  ])("rejects %s", (_name, body) => {
+    const result = parseBookPatch(body);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && typeof result.error).toBe("string");
   });
 });
